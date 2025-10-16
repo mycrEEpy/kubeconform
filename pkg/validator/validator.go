@@ -219,7 +219,7 @@ func (val *v) ValidateResource(res resource.Resource) Result {
 		}
 	}
 
-	validationErrors := validateSignature(sig)
+	validationErrors := validateMetadata(res.Metadata)
 
 	if schema == nil {
 		if len(validationErrors) > 0 {
@@ -380,29 +380,29 @@ func validateDuration(v any) error {
 	return nil
 }
 
-// validateSignature validates the fields of the given resource.Signature.
-func validateSignature(sig *resource.Signature) []ValidationError {
+// validateMetadata validates the fields of the given resource.ObjectMeta.
+func validateMetadata(meta *resource.ObjectMeta) []ValidationError {
 	validationErrors := []ValidationError{}
 
-	if sig == nil {
+	if meta == nil {
 		return validationErrors
 	}
 
-	if len(sig.Name) == 0 {
+	if len(meta.Name) == 0 {
 		validationErrors = append(validationErrors, ValidationError{
 			Path: "/metadata/name",
 			Msg:  "name is required",
 		})
 	}
 
-	if len(sig.Name) > 253 {
+	if len(meta.Name) > 253 {
 		validationErrors = append(validationErrors, ValidationError{
 			Path: "/metadata/name",
 			Msg:  "name must contain no more than 253 characters",
 		})
 	}
 
-	if !dns1123SubdomainRegexp.MatchString(sig.Name) {
+	if !dns1123SubdomainRegexp.MatchString(meta.Name) {
 		validationErrors = append(validationErrors, ValidationError{
 			Path: "/metadata/name",
 			Msg: "name must consist of lowercase alphanumeric characters, '-' or '.', " +

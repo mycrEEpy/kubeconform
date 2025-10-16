@@ -9,15 +9,25 @@ import (
 
 // Resource represents a Kubernetes resource within a file
 type Resource struct {
-	Path   string
-	Bytes  []byte
-	sig    *Signature // Cache signature parsing
-	sigErr error      // Cache potential signature parsing error
+	Path     string
+	Bytes    []byte
+	sig      *Signature // Cache signature parsing
+	sigErr   error      // Cache potential signature parsing error
+	Metadata *ObjectMeta
 }
 
 // Signature is a key representing a Kubernetes resource
 type Signature struct {
 	Kind, Version, Namespace, Name string
+}
+
+// ObjectMeta holds Kubernetes resource metadata
+type ObjectMeta struct {
+	Name         string            `yaml:"name"`
+	Namespace    string            `yaml:"namespace"`
+	GenerateName string            `yaml:"generateName"`
+	Annotations  map[string]string `yaml:"annotations"`
+	Labels       map[string]string `yaml:"labels"`
 }
 
 // GroupVersionKind returns a string with the GVK encoding of a resource signature.
@@ -39,15 +49,12 @@ func (res *Resource) Signature() (*Signature, error) {
 	}
 
 	resource := struct {
-		APIVersion string `yaml:"apiVersion"`
-		Kind       string `yaml:"kind"`
-		Metadata   struct {
-			Name         string `yaml:"name"`
-			Namespace    string `yaml:"namespace"`
-			GenerateName string `yaml:"generateName"`
-		} `yaml:"Metadata"`
+		APIVersion string     `yaml:"apiVersion"`
+		Kind       string     `yaml:"kind"`
+		Metadata   ObjectMeta `yaml:"metadata"`
 	}{}
 	err := yaml.Unmarshal(res.Bytes, &resource)
+	res.Metadata = &resource.Metadata
 
 	name := resource.Metadata.Name
 	if resource.Metadata.GenerateName != "" {

@@ -388,21 +388,27 @@ func validateMetadata(meta *resource.ObjectMeta) []ValidationError {
 		return validationErrors
 	}
 
-	if len(meta.Name) == 0 {
+	name := meta.Name
+
+	if len(name) == 0 && len(meta.GenerateName) > 0 {
+		name = meta.GenerateName + "xxxxx"
+	}
+
+	if len(name) == 0 {
 		validationErrors = append(validationErrors, ValidationError{
 			Path: "/metadata/name",
 			Msg:  "name is required",
 		})
 	}
 
-	if len(meta.Name) > 253 {
+	if len(name) > 253 {
 		validationErrors = append(validationErrors, ValidationError{
 			Path: "/metadata/name",
 			Msg:  "name must contain no more than 253 characters",
 		})
 	}
 
-	if !dns1123SubdomainRegexp.MatchString(meta.Name) {
+	if !dns1123SubdomainRegexp.MatchString(name) {
 		validationErrors = append(validationErrors, ValidationError{
 			Path: "/metadata/name",
 			Msg: "name must consist of lowercase alphanumeric characters, '-' or '.', " +

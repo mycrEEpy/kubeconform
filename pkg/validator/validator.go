@@ -5,6 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
+	"regexp"
+	"strings"
+	"time"
+
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/yannh/kubeconform/pkg/cache"
 	"github.com/yannh/kubeconform/pkg/loader"
@@ -12,11 +18,7 @@ import (
 	"github.com/yannh/kubeconform/pkg/resource"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
-	"io"
-	"os"
 	"sigs.k8s.io/yaml"
-	"strings"
-	"time"
 )
 
 // Different types of validation results
@@ -30,6 +32,8 @@ const (
 	Invalid        // resource is invalid
 	Empty          // resource is empty. Note: is triggered for files starting with a --- separator.
 )
+
+var dns1123SubdomainRegexp = regexp.MustCompile("^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$")
 
 type ValidationError struct {
 	Path string `json:"path"`
@@ -215,7 +219,18 @@ func (val *v) ValidateResource(res resource.Resource) Result {
 		}
 	}
 
+	validationErrors := validateSignature(sig)
+
 	if schema == nil {
+		if len(validationErrors) > 0 {
+			return Result{
+				Resource:         res,
+				Status:           Invalid,
+				Err:              fmt.Errorf("problem validating schema: %s", formatValidationErrors(validationErrors)),
+				ValidationErrors: validationErrors,
+			}
+		}
+
 		if val.opts.IgnoreMissingSchemas {
 			return Result{Resource: res, Err: nil, Status: Skipped}
 		}
@@ -225,7 +240,6 @@ func (val *v) ValidateResource(res resource.Resource) Result {
 
 	err = schema.Validate(r)
 	if err != nil {
-		validationErrors := []ValidationError{}
 		var e *jsonschema.ValidationError
 		if errors.As(err, &e) {
 			for _, ve := range e.Causes {
@@ -240,11 +254,13 @@ func (val *v) ValidateResource(res resource.Resource) Result {
 			}
 
 		}
+	}
 
+	if len(validationErrors) > 0 {
 		return Result{
 			Resource:         res,
 			Status:           Invalid,
-			Err:              fmt.Errorf("problem validating schema. Check JSON formatting: %s", strings.ReplaceAll(err.Error(), "\n", " ")),
+			Err:              fmt.Errorf("problem validating schema: %s", formatValidationErrors(validationErrors)),
 			ValidationErrors: validationErrors,
 		}
 	}
@@ -362,6 +378,54 @@ func validateDuration(v any) error {
 	}
 
 	return nil
+}
+
+// validateSignature validates the fields of the given resource.Signature.
+func validateSignature(sig *resource.Signature) []ValidationError {
+	validationErrors := []ValidationError{}
+
+	if sig == nil {
+		return validationErrors
+	}
+
+	if len(sig.Name) == 0 {
+		validationErrors = append(validationErrors, ValidationError{
+			Path: "/metadata/name",
+			Msg:  "name is required",
+		})
+	}
+
+	if len(sig.Name) > 253 {
+		validationErrors = append(validationErrors, ValidationError{
+			Path: "/metadata/name",
+			Msg:  "name must contain no more than 253 characters",
+		})
+	}
+
+	if !dns1123SubdomainRegexp.MatchString(sig.Name) {
+		validationErrors = append(validationErrors, ValidationError{
+			Path: "/metadata/name",
+			Msg: "name must consist of lowercase alphanumeric characters, '-' or '.', " +
+				"and must start and end with an alphanumeric character (e.g. 'example.com', regex used for validation is " +
+				"'[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*')",
+		})
+	}
+
+	return validationErrors
+}
+
+func formatValidationErrors(validationErrors []ValidationError) string {
+	b := strings.Builder{}
+
+	for i, err := range validationErrors {
+		b.WriteString(fmt.Sprintf("%s: %s", err.Path, err.Msg))
+
+		if i+1 < len(validationErrors) {
+			b.WriteString(", ")
+		}
+	}
+
+	return b.String()
 }
 
 func downloadSchema(registries []registry.Registry, l jsonschema.SchemeURLLoader, kind, version, k8sVersion string) (*jsonschema.Schema, error) {

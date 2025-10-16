@@ -2,11 +2,12 @@ package validator
 
 import (
 	"bytes"
-	"github.com/santhosh-tekuri/jsonschema/v6"
-	"github.com/yannh/kubeconform/pkg/loader"
 	"io"
 	"reflect"
 	"testing"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
+	"github.com/yannh/kubeconform/pkg/loader"
 
 	"github.com/yannh/kubeconform/pkg/registry"
 
@@ -574,11 +575,15 @@ func TestValidateFile(t *testing.T) {
 	inputData := []byte(`
 kind: name
 apiVersion: v1
+metadata:
+  name: foo
 firstName: bar
 lastName: qux
 ---
 kind: name
 apiVersion: v1
+metadata:
+  name: foo
 firstName: foo
 `)
 
